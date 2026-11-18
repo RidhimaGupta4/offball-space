@@ -1,0 +1,6 @@
+specification,n_significant_reversals,reversed_types,rank_correlation
+all runs,6,"behind, coming_short, dropping_off, overlap, pulling_wide, underlap",-0.4666666666666666
+high detection,3,"coming_short, dropping_off, pulling_wide",-0.49090909090909085
+alpha0,4,"behind, coming_short, pulling_wide, underlap",-0.6242424242424242
+moment-weighted,4,"coming_short, dropping_off, overlap, pulling_wide",-0.5636363636363636
+incl. runs with a shot during,6,"behind, coming_short, dropping_off, overlap, pulling_wide, underlap",-0.4666666666666666

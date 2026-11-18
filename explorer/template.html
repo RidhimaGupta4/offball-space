@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pitch Control Sandbox</title>
+<style>
+/*__FONTS_CSS__*/
+:root {
+  /* Plan: a working tool. Pitch canvas is the hero; controls sit in a narrow rail; readouts on top.
+     Blue = attacking team, red = defending team (same encoding as the project's figures). */
+  --bg: #f4f4f1;
+  --panel: #ffffff;
+  --ink: #141413;
+  --ink-2: #55544f;
+  --line: #dcdbd5;
+  --att: #2a78d6;
+  --def: #e34948;
+  --focus: #f2b705;
+  --pitch: #ecebe6;
+  --link: #1c5cab;
+  --chip-att: #1c5cab;
+  --chip-def: #a8322f;
+  --font-display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --font-body: "Barlow", "Segoe UI", system-ui, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161615; --panel: #20201e; --ink: #f1f0ec; --ink-2: #b7b6ae; --line: #3a3a36;
+    --att: #3987e5; --def: #e66767; --focus: #f5c431; --pitch: #2a2a27; --link: #86b6ef; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161615; --panel: #20201e; --ink: #f1f0ec; --ink-2: #b7b6ae; --line: #3a3a36;
+  --att: #3987e5; --def: #e66767; --focus: #f5c431; --pitch: #2a2a27; --link: #86b6ef; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; }
+.wrap { max-width: 1280px; margin: 0 auto; padding: 20px 20px 32px; display: grid; gap: 16px; }
+header { display: grid; gap: 4px; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: 2.1rem; letter-spacing: 0.01em; margin: 0; text-wrap: balance; }
+.lede { margin: 0; color: var(--ink-2); max-width: 70ch; line-height: 1.45; }
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; grid-template-areas: "stage rail" "foot rail";
+          grid-template-rows: auto 1fr; gap: 16px; align-items: start; }
+.stage { grid-area: stage; } .rail { grid-area: rail; } footer { grid-area: foot; }
+@media (max-width: 900px) { .layout { grid-template-columns: 1fr; grid-template-areas: "stage" "rail" "foot"; grid-template-rows: auto; } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+.stage { display: grid; gap: 12px; }
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 560px) { .tiles { grid-template-columns: 1fr; } }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 2px; }
+.tile .k { font-size: 0.78rem; color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.06em; }
+.tile .v { font-family: var(--font-display); font-size: 1.9rem; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.05; }
+.tile .d { font-size: 0.82rem; color: var(--ink-2); font-variant-numeric: tabular-nums; min-height: 1.2em; }
+.d.up { color: var(--att); } .d.down { color: var(--def); }
+.canvas-box { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+canvas#pitch { display: block; width: 100%; height: auto; touch-action: none; cursor: grab; border-radius: 6px; }
+canvas#pitch.dragging { cursor: grabbing; }
+#tip { position: absolute; pointer-events: none; background: var(--panel); color: var(--ink); border: 1px solid var(--line);
+       border-radius: 6px; padding: 6px 8px; font-size: 0.8rem; line-height: 1.35; box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+       display: none; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; font-size: 0.82rem; color: var(--ink-2); padding: 8px 2px 0; }
+.ramp { width: 140px; height: 10px; border-radius: 5px; background: linear-gradient(90deg, #a8322f, #e34948, #f2a3a0, #f0efec, #9ec5f4, #2a78d6, #1c5cab); }
+.dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; vertical-align: -1px; margin-right: 4px; border: 1.5px solid #fff; }
+.rail { display: grid; gap: 12px; }
+.rail h2 { font-family: var(--font-display); font-weight: 600; font-size: 1.05rem; letter-spacing: 0.04em; text-transform: uppercase; margin: 0 0 8px; }
+label { display: block; font-size: 0.85rem; color: var(--ink-2); margin-bottom: 4px; }
+select, button { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 7px; }
+select { width: 100%; padding: 7px 8px; }
+button { padding: 7px 10px; cursor: pointer; }
+button:hover { border-color: var(--ink-2); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; font-size: 0.82rem; padding: 7px 4px; background: transparent; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+.check { display: flex; gap: 8px; align-items: center; font-size: 0.9rem; color: var(--ink); margin: 6px 0; }
+.slider { display: grid; gap: 2px; margin: 8px 0; }
+.slider .top { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--ink-2); }
+.slider output { font-variant-numeric: tabular-nums; color: var(--ink); }
+input[type=range] { width: 100%; accent-color: var(--att); }
+.who { display: grid; gap: 2px; font-size: 0.9rem; }
+.who .name { font-weight: 600; font-size: 1rem; }
+.chip { display: inline-block; font-size: 0.72rem; padding: 1px 7px; border-radius: 99px; color: #fff; vertical-align: 2px; margin-left: 6px; }
+.hint { font-size: 0.82rem; color: var(--ink-2); line-height: 1.45; margin: 0; }
+footer { color: var(--ink-2); font-size: 0.82rem; line-height: 1.5; max-width: 95ch; display: grid; gap: 6px; }
+footer a { color: var(--link); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <h1>Pitch Control Sandbox</h1>
+    <p class="lede">Real moments from SkillCorner tracking data (A-League 2024/25). Drag any player, or the tip of a player's movement arrow, and the map recomputes which team would reach every point first, plus how much of the dangerous space the attacking team controls.</p>
+  </header>
+
+  <div class="layout">
+    <section class="stage" aria-label="Pitch and readouts">
+      <div class="tiles">
+        <div class="tile"><span class="k">Attack controls</span><span class="v" id="t-team">–</span><span class="d" id="t-team-d"></span></div>
+        <div class="tile"><span class="k">Selected player's impact</span><span class="v" id="t-focus">–</span><span class="d" id="t-focus-d"></span></div>
+        <div class="tile"><span class="k">Attack without selected</span><span class="v" id="t-without">–</span><span class="d" id="t-without-d"></span></div>
+      </div>
+      <div class="canvas-box">
+        <canvas id="pitch" width="1050" height="680" aria-label="Interactive pitch. Drag players to move them."></canvas>
+        <div id="tip" role="status"></div>
+        <div class="legend">
+          <span><span class="dot" style="background:var(--att)"></span>Attacking team (attacks left to right)</span>
+          <span><span class="dot" style="background:var(--def)"></span>Defending team</span>
+          <span id="legend-ramp"><span class="ramp" style="display:inline-block;vertical-align:-1px"></span> defenders reach first ↔ attackers reach first</span>
+          <span>Arrow = where the player is heading in 1 s</span>
+        </div>
+      </div>
+    </section>
+
+    <aside class="rail">
+      <div class="card">
+        <h2>Moment</h2>
+        <label for="scenario">Real off-ball run (start or end of the run)</label>
+        <select id="scenario"></select>
+        <p class="hint" id="scenario-info" style="margin-top:8px"></p>
+        <div class="row" style="margin-top:8px">
+          <button id="reset-pos" type="button">Reset positions</button>
+          <button id="swap-moment" type="button">Show other end of run</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>View</h2>
+        <div class="seg" role="group" aria-label="Map view">
+          <button type="button" data-view="pc" aria-pressed="true">Control</button>
+          <button type="button" data-view="value" aria-pressed="false">Dangerous space</button>
+          <button type="button" data-view="focus" aria-pressed="false">Selected player</button>
+        </div>
+        <p class="hint" id="view-hint" style="margin-top:8px"></p>
+      </div>
+
+      <div class="card">
+        <h2>Selected player</h2>
+        <label for="player">Choose, or click a player on the pitch</label>
+        <select id="player"></select>
+        <div class="who" id="who" style="margin-top:8px"></div>
+        <div class="row" style="margin-top:8px">
+          <button id="remove" type="button">Remove from pitch</button>
+          <button id="stop" type="button">Stop his movement</button>
+        </div>
+        <p class="hint" style="margin-top:8px">Arrow keys nudge the selected player by 1 m.</p>
+      </div>
+
+      <div class="card">
+        <h2>Model</h2>
+        <label class="check" for="use-vel"><input type="checkbox" id="use-vel" checked> Use players' current movement</label>
+        <label class="check" for="use-alpha"><input type="checkbox" id="use-alpha" checked> Receiver advantage (fitted on passes)</label>
+        <div class="slider"><div class="top"><label for="r" style="margin:0">Reaction time</label><output id="r-out"></output></div>
+          <input type="range" id="r" min="0.3" max="1.5" step="0.01"></div>
+        <div class="slider"><div class="top"><label for="vmax" style="margin:0">Running speed</label><output id="vmax-out"></output></div>
+          <input type="range" id="vmax" min="2.5" max="8" step="0.05"></div>
+        <div class="slider"><div class="top"><label for="beta" style="margin:0">Uncertainty (softness)</label><output id="beta-out"></output></div>
+          <input type="range" id="beta" min="0.1" max="1.0" step="0.01"></div>
+        <button id="reset-model" type="button">Reset to fitted values</button>
+      </div>
+    </aside>
+    <footer>
+      <div><strong>How it works.</strong> For every point, each player's arrival time is his reaction time plus the straight-line distance (from where his current movement carries him) divided by running speed. A smooth comparison of the two teams' arrival times gives the probability that the attacking team gets there first. The four parameters were fitted on <span id="n-passes"></span> passes from 20 matches and validated on held-out matches. <strong>"Attack controls"</strong> weights every point by how often possession from there leads to a shot within 10 seconds, so space near goal counts far more than space near halfway.</div>
+      <div><strong>Read with care.</strong> This model shows who would reach the ball first, not what will happen next. In the accompanying analysis, this kind of space did not predict shots any better than the ball and runner positions alone. Players marked with a dashed outline were off camera at this moment, and their positions are estimated by SkillCorner.</div>
+      <div>Data: <a href="https://github.com/SkillCorner/opendata">SkillCorner Open Data</a> (MIT licence), released with PySport. Analysis and sandbox: Ridhima Gupta, <a href="https://github.com/RidhimaGupta4">github.com/RidhimaGupta4</a>.</div>
+    </footer>
+  </div>
+
+</main>
+
+<script>/*__PC_JS__*/</script>
+<script>/*__DATA_JS__*/</script>
+<script>
+(function () {
+  "use strict";
+  const D = window.EXPLORER_DATA, M = window.PCModel;
+  const FITTED = { ...D.params };
+  const V = Float64Array.from(D.V), VMAX = D.v_max, NX = D.grid[0], NY = D.grid[1];
+  const state = { sc: null, players: [], original: [], prm: { ...FITTED }, useVel: true, useAlpha: true,
+                  view: "pc", focusId: null, drag: null, hover: null };
+
+  // ---------------------------------------------------------------- colours
+  const STOPS = ["#a8322f", "#e34948", "#f2a3a0", "#f0efec", "#9ec5f4", "#2a78d6", "#1c5cab"].map(h =>
+    [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]);
+  const LUT = new Uint8ClampedArray(256 * 3);
+  for (let i = 0; i < 256; i++) {
+    const t = i / 255 * (STOPS.length - 1), k = Math.min(Math.floor(t), STOPS.length - 2), f = t - k;
+    for (let c = 0; c < 3; c++) LUT[i * 3 + c] = STOPS[k][c] + (STOPS[k + 1][c] - STOPS[k][c]) * f;
+  }
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+  // ---------------------------------------------------------------- geometry
+  const canvas = document.getElementById("pitch"), ctx = canvas.getContext("2d");
+  const off = document.createElement("canvas"), octx = off.getContext("2d");
+  const MARGIN = 3; // metres around the pitch
+  let L = 105, W = 68, scale = 10, dpr = 1;
+  function layout() {
+    L = state.sc.pitch[0]; W = state.sc.pitch[1];
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const cssW = canvas.clientWidth || 900;
+    scale = cssW / (L + 2 * MARGIN);
+    canvas.width = Math.round(cssW * dpr);
+    canvas.height = Math.round((W + 2 * MARGIN) * scale * dpr);
+    canvas.style.height = ((W + 2 * MARGIN) * scale) + "px";
+    off.width = 210; off.height = Math.round(210 * W / L);
+  }
+  const toPx = (x, y) => [(x + L / 2 + MARGIN) * scale * dpr, (W / 2 - y + MARGIN) * scale * dpr];
+  const toM = (px, py) => [px / scale - L / 2 - MARGIN, W / 2 + MARGIN - py / scale];
+
+  // ---------------------------------------------------------------- model wrappers
+  const prm = () => ({ ...state.prm, alpha: state.useAlpha ? state.prm.alpha : 0 });
+  let G = null;
+  function shares() {
+    const p = prm();
+    const team = M.share(state.players, p, V, G, state.useVel);
+    const f = state.players.find(q => q.id === state.focusId);
+    let without = null;
+    if (f && !f.removed) without = M.share(state.players.map(q => q.id === f.id ? { ...q, removed: true } : q), p, V, G, state.useVel);
+    return { team, without };
+  }
+  function vAt(x, y) { // bilinear value surface lookup (normalised pitch)
+    const gx = (x + L / 2) / L * NX - 0.5, gy = (y + W / 2) / W * NY - 0.5;
+    const i0 = Math.max(0, Math.min(NX - 1, Math.floor(gx))), j0 = Math.max(0, Math.min(NY - 1, Math.floor(gy)));
+    const i1 = Math.min(NX - 1, i0 + 1), j1 = Math.min(NY - 1, j0 + 1);
+    const fx = Math.max(0, Math.min(1, gx - i0)), fy = Math.max(0, Math.min(1, gy - j0));
+    const a = V[j0 * NX + i0] * (1 - fx) + V[j0 * NX + i1] * fx, b = V[j1 * NX + i0] * (1 - fx) + V[j1 * NX + i1] * fx;
+    return a * (1 - fy) + b * fy;
+  }
+
+  // ---------------------------------------------------------------- render
+  function renderField() {
+    const p = prm(), P = M.prepare(state.players, p, state.useVel);
+    const f = state.players.find(q => q.id === state.focusId);
+    const Pw = (state.view === "focus" && f && !f.removed)
+      ? M.prepare(state.players.map(q => q.id === f.id ? { ...q, removed: true } : q), p, state.useVel) : null;
+    const img = octx.createImageData(off.width, off.height), d = img.data;
+    const bg = [240, 239, 236];
+    for (let j = 0; j < off.height; j++) for (let i = 0; i < off.width; i++) {
+      const x = (i + 0.5) / off.width * L - L / 2, y = W / 2 - (j + 0.5) / off.height * W;
+      let c = M.control(P, x, y, p), rgb;
+      if (state.view === "focus") {
+        if (!Pw) { rgb = bg; } else {
+          const diff = c - M.control(Pw, x, y, p);           // [-1, 1]
+          const k = Math.round((Math.max(-1, Math.min(1, diff * 1.6)) + 1) / 2 * 255);
+          rgb = [LUT[k * 3], LUT[k * 3 + 1], LUT[k * 3 + 2]];
+        }
+      } else {
+        const k = Math.round(c * 255);
+        rgb = [LUT[k * 3], LUT[k * 3 + 1], LUT[k * 3 + 2]];
+        if (state.view === "value") {
+          const w = Math.pow(Math.min(1, vAt(x, y) / VMAX), 0.7);
+          rgb = [bg[0] + (rgb[0] - bg[0]) * w, bg[1] + (rgb[1] - bg[1]) * w, bg[2] + (rgb[2] - bg[2]) * w];
+        }
+      }
+      const o = (j * off.width + i) * 4;
+      d[o] = rgb[0]; d[o + 1] = rgb[1]; d[o + 2] = rgb[2]; d[o + 3] = 255;
+    }
+    octx.putImageData(img, 0, 0);
+  }
+
+  function drawPitchLines() {
+    const col = state.view === "value" ? "rgba(40,40,38,0.45)" : "rgba(255,255,255,0.9)"; // white lines vanish on the faded map
+    ctx.strokeStyle = col; ctx.lineWidth = 1.5 * dpr;
+    const line = (pts) => { ctx.beginPath(); pts.forEach(([x, y], k) => { const [a, b] = toPx(x, y); k ? ctx.lineTo(a, b) : ctx.moveTo(a, b); }); ctx.stroke(); };
+    const hl = L / 2, hw = W / 2;
+    line([[-hl, -hw], [hl, -hw], [hl, hw], [-hl, hw], [-hl, -hw]]);
+    line([[0, -hw], [0, hw]]);
+    const circ = (cx, cy, r, a0 = 0, a1 = 2 * Math.PI) => { const [a, b] = toPx(cx, cy); ctx.beginPath(); ctx.arc(a, b, r * scale * dpr, a0, a1); ctx.stroke(); };
+    circ(0, 0, 9.15);
+    for (const s of [-1, 1]) {
+      line([[s * hl, -20.16], [s * (hl - 16.5), -20.16], [s * (hl - 16.5), 20.16], [s * hl, 20.16]]);
+      line([[s * hl, -9.16], [s * (hl - 5.5), -9.16], [s * (hl - 5.5), 9.16], [s * hl, 9.16]]);
+      const ang = Math.acos(5.5 / 9.15);
+      if (s > 0) circ(hl - 11, 0, 9.15, Math.PI - ang, Math.PI + ang); else circ(-hl + 11, 0, 9.15, -ang, ang);
+      line([[s * hl, -3.66], [s * (hl + 1.5), -3.66], [s * (hl + 1.5), 3.66], [s * hl, 3.66]]);
+    }
+  }
+
+  function draw() {
+    const att = css("--att"), def = css("--def"), focusCol = css("--focus"), ink = css("--ink");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = css("--pitch"); ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const [x0, y0] = toPx(-L / 2, W / 2), [x1, y1] = toPx(L / 2, -W / 2);
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(off, x0, y0, x1 - x0, y1 - y0);
+    drawPitchLines();
+    // direction cue
+    ctx.fillStyle = css("--ink-2"); ctx.font = `600 ${11 * dpr}px ${css("--font-body")}`; ctx.textAlign = "right";
+    const [ax, ay] = toPx(L / 2, W / 2 + 0.9); ctx.fillText("attacking direction →", ax, ay); ctx.textAlign = "start";
+    const R = Math.max(1.15 * scale, 7.5) * dpr;
+    // movement arrows
+    if (state.useVel) for (const p of state.players) {
+      if (p.removed) continue;
+      const [a, b] = toPx(p.x, p.y), [c, e] = toPx(p.x + p.vx, p.y + p.vy);
+      ctx.strokeStyle = p.team === "att" ? att : def; ctx.lineWidth = 2 * dpr; ctx.globalAlpha = 0.85;
+      ctx.beginPath(); ctx.moveTo(a, b); ctx.lineTo(c, e); ctx.stroke();
+      ctx.beginPath(); ctx.arc(c, e, 2.6 * dpr, 0, 2 * Math.PI); ctx.fillStyle = ctx.strokeStyle; ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    // players
+    for (const p of state.players) {
+      const [a, b] = toPx(p.x, p.y);
+      ctx.beginPath(); ctx.arc(a, b, R, 0, 2 * Math.PI);
+      if (p.removed) {
+        ctx.setLineDash([3 * dpr, 3 * dpr]); ctx.strokeStyle = "rgba(90,90,90,0.9)"; ctx.lineWidth = 1.5 * dpr; ctx.stroke(); ctx.setLineDash([]);
+        continue;
+      }
+      ctx.fillStyle = p.team === "att" ? att : def; ctx.fill();
+      ctx.lineWidth = 1.6 * dpr; ctx.strokeStyle = "#ffffff";
+      if (!p.detected) ctx.setLineDash([2.5 * dpr, 2 * dpr]);
+      ctx.stroke(); ctx.setLineDash([]);
+      if (p.runner) { ctx.beginPath(); ctx.arc(a, b, R + 3 * dpr, 0, 2 * Math.PI); ctx.strokeStyle = ink; ctx.lineWidth = 2 * dpr; ctx.stroke(); }
+      if (p.id === state.focusId) { ctx.beginPath(); ctx.arc(a, b, R + 6 * dpr, 0, 2 * Math.PI); ctx.strokeStyle = focusCol; ctx.lineWidth = 3 * dpr; ctx.stroke(); }
+      if (p.num != null) {
+        ctx.fillStyle = "#ffffff"; ctx.font = `600 ${Math.min(10, R / dpr * 0.95) * dpr}px ${css("--font-body")}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(String(p.num), a, b + 0.5 * dpr); ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
+      }
+    }
+    if (state.sc.ball) {
+      const [a, b] = toPx(state.sc.ball[0], state.sc.ball[1]);
+      ctx.beginPath(); ctx.arc(a, b, 0.6 * scale * dpr, 0, 2 * Math.PI); ctx.fillStyle = "#ffffff"; ctx.fill();
+      ctx.lineWidth = 1.5 * dpr; ctx.strokeStyle = "#141413"; ctx.stroke();
+    }
+  }
+
+  // ---------------------------------------------------------------- readouts
+  let base = null;
+  const pct = v => (100 * v).toFixed(1) + "%";
+  const pp = v => (v >= 0 ? "+" : "−") + Math.abs(100 * v).toFixed(1) + " pp";
+  function setDelta(el, v, label) {
+    el.textContent = v == null ? "" : `${pp(v)} ${label}`;
+    el.className = "d" + (v == null || Math.abs(v) < 0.0005 ? "" : v > 0 ? " up" : " down");
+  }
+  function readouts() {
+    const s = shares();
+    document.getElementById("t-team").textContent = pct(s.team);
+    setDelta(document.getElementById("t-team-d"), base ? s.team - base.team : null, "vs this real moment");
+    const f = state.players.find(q => q.id === state.focusId);
+    const tf = document.getElementById("t-focus"), tw = document.getElementById("t-without");
+    if (f && !f.removed && s.without != null) {
+      tf.textContent = pp(s.team - s.without);
+      document.getElementById("t-focus-d").textContent = f.team === "att" ? "dangerous space he adds for the attack" : "dangerous space he takes from the attack";
+      document.getElementById("t-focus-d").className = "d";
+      tw.textContent = pct(s.without);
+      document.getElementById("t-without-d").textContent = `attack's share if ${f.name} were not there`;
+    } else {
+      tf.textContent = "–"; tw.textContent = "–";
+      document.getElementById("t-focus-d").textContent = f && f.removed ? `${f.name} is removed` : "select a player";
+      document.getElementById("t-without-d").textContent = "";
+    }
+  }
+
+  let pending = false;
+  function update(full = true) {
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(() => { pending = false; if (full) renderField(); draw(); readouts(); updateWho(); });
+  }
+
+  // ---------------------------------------------------------------- scenario handling
+  const nice = s => s.replace(/_/g, " ").replace(/^./, c => c.toUpperCase());
+  function buildScenarioSelect() {
+    const sel = document.getElementById("scenario"), groups = {};
+    D.scenarios.forEach((s, k) => { (groups[s.run_type] = groups[s.run_type] || []).push([s, k]); });
+    for (const [rt, items] of Object.entries(groups)) {
+      const og = document.createElement("optgroup"); og.label = nice(rt) + " run";
+      for (const [s, k] of items) {
+        const o = document.createElement("option"); o.value = k;
+        o.textContent = `${nice(rt)}: ${s.moment} of run`;
+        og.appendChild(o);
+      }
+      sel.appendChild(og);
+    }
+    sel.addEventListener("change", () => loadScenario(+sel.value));
+  }
+  function loadScenario(k) {
+    state.sc = D.scenarios[k];
+    document.getElementById("scenario").value = k;
+    state.players = state.sc.players.map(p => ({ ...p, removed: false }));
+    state.original = state.sc.players.map(p => ({ ...p, removed: false }));
+    const runner = state.players.find(p => p.runner);
+    state.focusId = runner ? runner.id : null;
+    layout();
+    G = M.grid(NX, NY, L, W);
+    base = { team: M.share(state.original, prm(), V, G, state.useVel) };
+    const s = state.sc;
+    document.getElementById("scenario-info").textContent =
+      `${s.attacking_team} vs ${s.opponent}, minute ${s.minute}. ${s.runner}'s ${nice(s.run_type).toLowerCase()} run lasted ${s.duration_s.toFixed(1)} s. ` +
+      `${Math.round(100 * s.det_frac)}% of players on camera.`;
+    buildPlayerSelect();
+    update();
+  }
+  function rebase() { base = { team: M.share(state.original, prm(), V, G, state.useVel) }; }
+
+  function buildPlayerSelect() {
+    const sel = document.getElementById("player"); sel.innerHTML = "";
+    for (const team of ["att", "def"]) {
+      const og = document.createElement("optgroup");
+      og.label = team === "att" ? `${state.sc.attacking_team} (attacking)` : `${state.sc.opponent} (defending)`;
+      state.players.filter(p => p.team === team).forEach(p => {
+        const o = document.createElement("option"); o.value = p.id;
+        o.textContent = `${p.num != null ? p.num + " " : ""}${p.name} (${p.pos})${p.runner ? ", runner" : ""}`;
+        og.appendChild(o);
+      });
+      sel.appendChild(og);
+    }
+    sel.value = state.focusId;
+  }
+  function updateWho() {
+    const f = state.players.find(q => q.id === state.focusId), el = document.getElementById("who");
+    if (!f) { el.textContent = ""; return; }
+    document.getElementById("player").value = f.id;
+    const speed = Math.hypot(f.vx, f.vy) * 3.6;
+    el.innerHTML = "";
+    const n = document.createElement("div"); n.className = "name"; n.textContent = f.name;
+    const chip = document.createElement("span"); chip.className = "chip";
+    chip.style.background = f.team === "att" ? "var(--chip-att)" : "var(--chip-def)"; chip.textContent = f.team === "att" ? "attack" : "defence";
+    n.appendChild(chip);
+    const m = document.createElement("div"); m.style.color = "var(--ink-2)";
+    m.textContent = `${f.pos}${f.runner ? ", making the run" : ""} · moving at ${speed.toFixed(1)} km/h${f.detected ? "" : " · off camera (estimated position)"}`;
+    el.append(n, m);
+    document.getElementById("remove").textContent = f.removed ? "Put back on pitch" : "Remove from pitch";
+  }
+
+  // ---------------------------------------------------------------- interaction
+  function hit(mx, my) {
+    const R = Math.max(1.15 * scale, 7.5) * dpr + Math.max(6, 18 - 1.15 * scale) * dpr; // generous touch target
+    if (state.useVel) for (const p of state.players) {
+      if (p.removed) continue;
+      const [c, e] = toPx(p.x + p.vx, p.y + p.vy);
+      if (Math.hypot(mx - c, my - e) < 9 * dpr && Math.hypot(p.vx, p.vy) > 0.3) return { p, kind: "arrow" };
+    }
+    let best = null, bd = Infinity;
+    for (const p of state.players) {
+      const [a, b] = toPx(p.x, p.y), d = Math.hypot(mx - a, my - b);
+      if (d < R && d < bd) { best = p; bd = d; }
+    }
+    return best ? { p: best, kind: "body" } : null;
+  }
+  const evPos = e => { const r = canvas.getBoundingClientRect(); return [(e.clientX - r.left) * dpr, (e.clientY - r.top) * dpr, e.clientX - r.left, e.clientY - r.top]; };
+  const clampP = p => { p.x = Math.max(-L / 2 - 2, Math.min(L / 2 + 2, p.x)); p.y = Math.max(-W / 2 - 2, Math.min(W / 2 + 2, p.y)); };
+
+  canvas.addEventListener("pointerdown", e => {
+    const [mx, my] = evPos(e), h = hit(mx, my);
+    if (!h) return;
+    state.focusId = h.p.id;
+    if (!h.p.removed) { state.drag = h; canvas.setPointerCapture(e.pointerId); canvas.classList.add("dragging"); }
+    update();
+  });
+  canvas.addEventListener("pointermove", e => {
+    const [mx, my, cx, cy] = evPos(e), tip = document.getElementById("tip");
+    if (state.drag) {
+      const [x, y] = toM(mx / dpr, my / dpr), p = state.drag.p;
+      if (state.drag.kind === "body") { p.x = x; p.y = y; clampP(p); }
+      else { let vx = x - p.x, vy = y - p.y; const s = Math.hypot(vx, vy); if (s > 10) { vx *= 10 / s; vy *= 10 / s; } p.vx = vx; p.vy = vy; }
+      tip.style.display = "none";
+      update();
+      return;
+    }
+    const h = hit(mx, my);
+    const [x, y] = toM(mx / dpr, my / dpr);
+    if (Math.abs(x) > L / 2 || Math.abs(y) > W / 2) { tip.style.display = "none"; return; }
+    let html;
+    if (h && h.kind === "body") {
+      const p = h.p;
+      html = `<strong>${p.name}</strong> (${p.pos})<br>${p.removed ? "removed: click to select, then put back" : (Math.hypot(p.vx, p.vy) * 3.6).toFixed(1) + " km/h · drag to move"}`;
+    } else if (h && h.kind === "arrow") {
+      html = `Drag to change where ${h.p.name} is heading`;
+    } else {
+      const c = M.control(M.prepare(state.players, prm(), state.useVel), x, y, prm());
+      html = `Attack reaches first: <strong>${(100 * c).toFixed(0)}%</strong><br>Shot within 10 s from here: ${(100 * vAt(x, y)).toFixed(1)}% of the time`;
+    }
+    tip.innerHTML = html; tip.style.display = "block";
+    const box = canvas.parentElement.getBoundingClientRect(), cr = canvas.getBoundingClientRect();
+    let left = cr.left - box.left + cx + 14, top = cr.top - box.top + cy + 14;
+    if (left + tip.offsetWidth > box.width - 6) left = cr.left - box.left + cx - tip.offsetWidth - 14;
+    tip.style.left = left + "px"; tip.style.top = top + "px";
+  });
+  const endDrag = () => { if (state.drag) { state.drag = null; canvas.classList.remove("dragging"); update(); } };
+  canvas.addEventListener("pointerup", endDrag);
+  canvas.addEventListener("pointercancel", endDrag);
+  canvas.addEventListener("pointerleave", () => { document.getElementById("tip").style.display = "none"; });
+
+  document.addEventListener("keydown", e => {
+    const tag = (document.activeElement && document.activeElement.tagName) || "";
+    if (["INPUT", "SELECT", "TEXTAREA"].includes(tag)) return;
+    const f = state.players.find(q => q.id === state.focusId);
+    if (!f || f.removed) return;
+    const step = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[e.key];
+    if (!step) return;
+    e.preventDefault(); f.x += step[0]; f.y += step[1]; clampP(f); update();
+  });
+
+  document.getElementById("player").addEventListener("change", e => { state.focusId = +e.target.value; update(); });
+  document.getElementById("remove").addEventListener("click", () => {
+    const f = state.players.find(q => q.id === state.focusId); if (f) { f.removed = !f.removed; update(); }
+  });
+  document.getElementById("stop").addEventListener("click", () => {
+    const f = state.players.find(q => q.id === state.focusId); if (f) { f.vx = 0; f.vy = 0; update(); }
+  });
+  document.getElementById("reset-pos").addEventListener("click", () => {
+    state.players = state.original.map(p => ({ ...p })); update();
+  });
+  document.getElementById("swap-moment").addEventListener("click", () => {
+    const s = state.sc, other = D.scenarios.findIndex(q => q.match_id === s.match_id && q.runner === s.runner &&
+      q.run_type === s.run_type && q.moment !== s.moment);
+    if (other >= 0) loadScenario(other);
+  });
+  const HINTS = {
+    pc: "Blue where the attacking team would reach a ball first, red where defenders would.",
+    value: "The same map, faded where possession rarely leads to a shot. This is the space that counts towards \"Attack controls\".",
+    focus: "What the selected player changes: blue is space he wins for the attack, red is space he takes away. Grey: no difference.",
+  };
+  document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => {
+    state.view = b.dataset.view;
+    document.querySelectorAll(".seg button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    document.getElementById("view-hint").textContent = HINTS[state.view];
+    update();
+  }));
+  document.getElementById("use-vel").addEventListener("change", e => { state.useVel = e.target.checked; rebase(); update(); });
+  document.getElementById("use-alpha").addEventListener("change", e => { state.useAlpha = e.target.checked; rebase(); update(); });
+  const fmt = { r: v => v.toFixed(2) + " s", vmax: v => v.toFixed(2) + " m/s (" + (v * 3.6).toFixed(1) + " km/h)", beta: v => v.toFixed(2) + " s" };
+  function syncSliders() { for (const k of ["r", "vmax", "beta"]) { document.getElementById(k).value = state.prm[k]; document.getElementById(k + "-out").textContent = fmt[k](state.prm[k]); } }
+  for (const k of ["r", "vmax", "beta"]) document.getElementById(k).addEventListener("input", e => {
+    state.prm[k] = +e.target.value; document.getElementById(k + "-out").textContent = fmt[k](state.prm[k]); rebase(); update();
+  });
+  document.getElementById("reset-model").addEventListener("click", () => {
+    state.prm = { ...FITTED }; state.useVel = true; state.useAlpha = true;
+    document.getElementById("use-vel").checked = true; document.getElementById("use-alpha").checked = true;
+    syncSliders(); rebase(); update();
+  });
+  window.addEventListener("resize", () => { if (state.sc) { layout(); update(); } });
+
+  // ---------------------------------------------------------------- start
+  document.getElementById("n-passes").textContent = D.n_passes.toLocaleString("en-GB");
+  document.getElementById("view-hint").textContent = HINTS.pc;
+  buildScenarioSelect(); syncSliders();
+  const start = D.scenarios.findIndex(s => s.run_type === "run_ahead_of_the_ball" && s.moment === "end");
+  loadScenario(start >= 0 ? start : 0);
+})();
+</script>
+</body>
+</html>

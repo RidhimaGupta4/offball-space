@@ -1,0 +1,2 @@
+comparison,logloss_gain,ci_lo,ci_hi,matches_improved,n_matches,gain_relative_to_space_bound
+full context vs without end location,0.012848257821848067,0.009278376856279937,0.016334605729949467,18,20,11.945910524297819
