@@ -274,4 +274,4 @@ Code, figures and text: [MIT](LICENSE). The sandbox embeds a small excerpt of Sk
 
 ---
 
-**Ridhima Gupta** · MSc Statistics with Data Science, University of Edinburgh · [github.com/RidhimaGupta4](https://github.com/RidhimaGupta4)
+**Ridhima Gupta** · [github.com/RidhimaGupta4](https://github.com/RidhimaGupta4)
